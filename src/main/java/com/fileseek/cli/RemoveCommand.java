@@ -1,7 +1,11 @@
 package com.fileseek.cli;
 
+import com.fileseek.config.AppConfig;
+import com.fileseek.config.ConfigManager;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Parameters;
+
+import java.nio.file.Path;
 
 @Command(
         name = "remove",
@@ -15,6 +19,17 @@ public class RemoveCommand implements Runnable {
 
     @Override
     public void run() {
-        System.out.println("remove: " + path);
+        String resolved = path.replace("~", System.getProperty("user.home"));
+        String absolute = Path.of(resolved).toAbsolutePath().toString();
+
+        AppConfig config = ConfigManager.load();
+        boolean removed = config.removeWatchedDirectory(absolute);
+        ConfigManager.save(config);
+
+        if (removed) {
+            System.out.println("Removed: " + absolute);
+        } else {
+            System.out.println("Not found in config: " + absolute);
+        }
     }
 }
