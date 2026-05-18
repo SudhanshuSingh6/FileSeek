@@ -1,8 +1,11 @@
 package com.fileseek.cli;
 
 import com.fileseek.config.ConfigManager;
+import com.fileseek.index.IndexManager;
 import picocli.CommandLine.Command;
 
+import java.io.IOException;
+import java.nio.file.Files;
 import java.util.Scanner;
 
 @Command(
@@ -23,7 +26,13 @@ public class ResetCommand implements Runnable {
         }
 
         ConfigManager.delete();
-        // Phase 6 — index file deletion added here later
+
+        try {
+            Files.deleteIfExists(IndexManager.getIndexFile());
+        } catch (IOException e) {
+            System.err.println("[warn] Could not delete index file: " + e.getMessage());
+        }
+
         System.out.println("Reset complete. Run 'fileseek' to set up again.");
     }
 }

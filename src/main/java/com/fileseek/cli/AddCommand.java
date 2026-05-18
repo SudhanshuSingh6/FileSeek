@@ -2,6 +2,8 @@ package com.fileseek.cli;
 
 import com.fileseek.config.AppConfig;
 import com.fileseek.config.ConfigManager;
+import com.fileseek.index.IndexManager;
+import com.fileseek.scanner.ScanResult;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Parameters;
 
@@ -30,7 +32,22 @@ public class AddCommand implements Runnable {
         AppConfig config = ConfigManager.load();
         config.addWatchedDirectory(dir.toAbsolutePath().toString());
         ConfigManager.save(config);
-
         System.out.println("Added: " + dir.toAbsolutePath());
+
+        IndexManager indexManager = new IndexManager();
+        indexManager.load();
+
+        System.out.println("Indexing...");
+        ScanResult result = indexManager.indexDirectory(
+                dir, config,
+                (count, file) -> System.out.printf("\r  Files processed: %d  ", count)
+        );
+
+        System.out.println();
+        System.out.println(result);
+
+        System.out.print("Saving index... ");
+        indexManager.save();
+        System.out.println("done.");
     }
 }
