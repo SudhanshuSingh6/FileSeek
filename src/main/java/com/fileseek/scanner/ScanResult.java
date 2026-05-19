@@ -7,6 +7,8 @@ import java.util.List;
 public class ScanResult {
 
     private int filesIndexed = 0;
+    private int filesUpdated = 0;
+    private int filesRemoved = 0;
     private int filesSkipped = 0;
     private int metadataOnly = 0;
     private int directoriesScanned = 0;
@@ -14,8 +16,20 @@ public class ScanResult {
     private long durationMs = 0;
     private final List<String> errorMessages = new ArrayList<>();
 
+    public void setFilesRemoved(int count) {
+        filesRemoved = count;
+    }
+
     public void incrementIndexed() {
         filesIndexed++;
+    }
+
+    public void incrementUpdated() {
+        filesUpdated++;
+    }
+
+    public void incrementRemoved() {
+        filesRemoved++;
     }
 
     public void incrementSkipped() {
@@ -47,6 +61,14 @@ public class ScanResult {
         return filesIndexed;
     }
 
+    public int getFilesUpdated() {
+        return filesUpdated;
+    }
+
+    public int getFilesRemoved() {
+        return filesRemoved;
+    }
+
     public int getFilesSkipped() {
         return filesSkipped;
     }
@@ -72,14 +94,14 @@ public class ScanResult {
     }
 
     public int totalProcessed() {
-        return filesIndexed + filesSkipped + metadataOnly;
+        return filesIndexed + filesUpdated + filesSkipped + metadataOnly;
     }
 
     @Override
     public String toString() {
         return String.format(
-                "Indexed %d files (%d metadata-only, %d skipped, %d errors) in %.2fs",
-                filesIndexed, metadataOnly, filesSkipped, errors, durationMs / 1000.0
-        );
+                "Indexed %d  Updated %d  Removed %d  Skipped %d  Errors %d  (%.2fs)",
+                filesIndexed, filesUpdated, filesRemoved,
+                filesSkipped, errors, durationMs / 1000.0);
     }
 }

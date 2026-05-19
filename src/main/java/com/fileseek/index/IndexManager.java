@@ -4,13 +4,16 @@ import com.fileseek.config.AppConfig;
 import com.fileseek.config.ConfigManager;
 import com.fileseek.model.FileMetadata;
 import com.fileseek.scanner.DirectoryScanner;
+import com.fileseek.scanner.FileParser;
 import com.fileseek.scanner.ScanResult;
 import com.fileseek.storage.CorruptionChecker;
 import com.fileseek.storage.IndexDeserializer;
 import com.fileseek.storage.IndexSerializer;
+import com.fileseek.util.Tokenizer;
 
 import java.io.IOException;
-import java.nio.file.Path;
+import java.nio.file.*;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.BiConsumer;
@@ -23,6 +26,7 @@ public class IndexManager {
     private final DocumentStore documentStore = new DocumentStore();
     private final InvertedIndex invertedIndex = new InvertedIndex();
     private final DirectoryScanner scanner = new DirectoryScanner();
+    private final FileParser fileParser = new FileParser();
 
     public void save() {
         try {
@@ -49,7 +53,6 @@ public class IndexManager {
                     documentStore.size(), invertedIndex.termCount());
         } catch (IOException e) {
             System.err.println("[error] Failed to load index: " + e.getMessage());
-            System.err.println("[info] Resetting to empty index.");
             clear();
         }
     }
@@ -62,18 +65,55 @@ public class IndexManager {
         return INDEX_FILE;
     }
 
-
-    public int indexDocument(FileMetadata metadata, List<String> tokens) {
+    public void indexDocument(FileMetadata metadata, List<String> tokens) {
         int docId = documentStore.addDocument(metadata);
         for (int position = 0; position < tokens.size(); position++) {
             invertedIndex.addPosting(tokens.get(position), docId, position);
         }
-        return docId;
     }
 
     public ScanResult indexDirectory(
-            Path dir, AppConfig config, BiConsumer<Integer, String> onProgress) {
+            Path dir, AppConfig config,
+            BiConsumer<Integer, String> onProgress) {
         return scanner.scan(dir, config, this, onProgress);
+    }
+
+    public boolean reindexFile(Path file, AppConfig config) {
+        if (!fileParser.isSupported(file)) return false;
+
+        String absolutePath = file.toAbsolutePath().toString();
+
+        removeDocument(absolutePath);
+
+        try {
+            BasicFileAttributes attrs =
+                    Files.readAttributes(file, BasicFileAttributes.class);
+            long sizeBytes = attrs.size();
+            String ext = FileParser.extension(file);
+
+            FileMetadata metadata = new FileMetadata(
+                    0, absolutePath, file.getFileName().toString(),
+                    ext, sizeBytes, attrs.lastModifiedTime().toMillis());
+
+            List<String> tokens;
+
+            if (isLargeFile(ext, sizeBytes, config)) {
+                tokens = Tokenizer.tokenizeFilename(file.getFileName().toString());
+            } else {
+                var content = fileParser.parse(file);
+                if (content.isEmpty()) return false;
+                tokens = Tokenizer.tokenize(content.get());
+                tokens.addAll(Tokenizer.tokenizeFilename(file.getFileName().toString()));
+            }
+
+            indexDocument(metadata, tokens);
+            return true;
+
+        } catch (IOException e) {
+            System.err.printf("[warn] Could not re-index %s: %s%n",
+                    file.getFileName(), e.getMessage());
+            return false;
+        }
     }
 
     public boolean removeDocument(String path) {
@@ -93,8 +133,8 @@ public class IndexManager {
         return invertedIndex;
     }
 
-    public boolean isIndexed(String path) {
-        return documentStore.containsPath(path);
+    public boolean isIndexed(String p) {
+        return documentStore.containsPath(p);
     }
 
     public int documentCount() {
@@ -108,5 +148,11 @@ public class IndexManager {
     public void clear() {
         documentStore.clear();
         invertedIndex.clear();
+    }
+
+    private boolean isLargeFile(String ext, long sizeBytes, AppConfig config) {
+        return ext.equals(".pdf")
+                ? sizeBytes > config.getMaxPdfFileSizeBytes()
+                : sizeBytes > config.getMaxTextFileSizeBytes();
     }
 }

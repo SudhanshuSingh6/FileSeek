@@ -1,8 +1,10 @@
 package com.fileseek.cli;
 
+import com.fileseek.cli.display.ProgressBar;
 import com.fileseek.config.AppConfig;
 import com.fileseek.config.ConfigManager;
 import com.fileseek.index.IndexManager;
+import com.fileseek.scanner.DirectoryScanner;
 import com.fileseek.scanner.ScanResult;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Parameters;
@@ -34,20 +36,43 @@ public class AddCommand implements Runnable {
         ConfigManager.save(config);
         System.out.println("Added: " + dir.toAbsolutePath());
 
+        // Pass 1 — count so the progress bar has a total
+        DirectoryScanner scanner = new DirectoryScanner();
+        System.out.print("Counting files... ");
+        int total = scanner.countIndexableFiles(dir, config);
+        System.out.printf("%,d files found%n", total);
+
+        // Load existing index
         IndexManager indexManager = new IndexManager();
         indexManager.load();
 
-        System.out.println("Indexing...");
-        ScanResult result = indexManager.indexDirectory(
-                dir, config,
-                (count, file) -> System.out.printf("\r  Files processed: %d  ", count)
-        );
+        // Pass 2 — index with progress bar
+        ProgressBar bar = new ProgressBar(total);
+        long startMs = System.currentTimeMillis();
 
-        System.out.println();
-        System.out.println(result);
+        ScanResult result = indexManager.indexDirectory(dir, config,
+                (count, file) -> bar.update(count, Path.of(file).getFileName().toString()));
 
+        bar.complete(result.getFilesIndexed() + result.getFilesUpdated(),
+                System.currentTimeMillis() - startMs);
+
+        // Summary
+        System.out.printf("  %,d new  |  %,d updated  |  %,d removed  |  %d errors%n",
+                result.getFilesIndexed(),
+                result.getFilesUpdated(),
+                result.getFilesRemoved(),
+                result.getErrors());
+
+        // Save
         System.out.print("Saving index... ");
+        long saveStart = System.currentTimeMillis();
         indexManager.save();
-        System.out.println("done.");
+        System.out.printf("done (%.2fs)%n",
+                (System.currentTimeMillis() - saveStart) / 1000.0);
+
+        // Index stats
+        System.out.printf("%nIndex: %,d documents  |  %,d unique terms%n",
+                indexManager.documentCount(),
+                indexManager.termCount());
     }
 }

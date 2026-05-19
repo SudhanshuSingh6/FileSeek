@@ -12,11 +12,9 @@ public class PdfParser {
     private final PDFTextStripper stripper;
 
     public PdfParser() {
-        try {
-            stripper = new PDFTextStripper();
-        } catch (IOException e) {
-            throw new RuntimeException("Failed to initialize PDFTextStripper", e);
-        }
+
+        stripper = new PDFTextStripper();
+
     }
 
     public String parse(Path file) throws IOException {

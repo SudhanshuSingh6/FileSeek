@@ -13,7 +13,7 @@ public class CorruptionChecker {
                         new GZIPInputStream(
                                 new FileInputStream(indexFile.toFile()))))) {
 
-            int magic   = in.readInt();
+            int magic = in.readInt();
             int version = in.readInt();
 
             if (magic != IndexSerializer.MAGIC) {

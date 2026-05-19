@@ -18,6 +18,7 @@ import java.nio.charset.StandardCharsets;
                 RemoveCommand.class,
                 ConfigCommand.class,
                 ResetCommand.class,
+                WatchCommand.class,          // added
                 CommandLine.HelpCommand.class
         }
 )
@@ -26,7 +27,6 @@ public class FileSeekCommand implements Runnable {
     @Override
     public void run() {
         printBanner();
-        // No subcommand given — print help
         CommandLine.usage(this, System.out);
     }
 
@@ -37,7 +37,6 @@ public class FileSeekCommand implements Runnable {
                 System.out.println(banner);
             }
         } catch (Exception e) {
-            // Banner is cosmetic — never crash on it
         }
     }
 }

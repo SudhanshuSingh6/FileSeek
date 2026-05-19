@@ -8,9 +8,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public class DocumentStore {
 
-    private final Map<Integer, FileMetadata> store      = new ConcurrentHashMap<>();
-    private final Map<String,  Integer>      pathIndex  = new ConcurrentHashMap<>();
-    private final AtomicInteger              nextDocId  = new AtomicInteger(1);
+    private final Map<Integer, FileMetadata> store = new ConcurrentHashMap<>();
+    private final Map<String, Integer> pathIndex = new ConcurrentHashMap<>();
+    private final AtomicInteger nextDocId = new AtomicInteger(1);
 
     public int addDocument(FileMetadata metadata) {
         int docId = nextDocId.getAndIncrement();

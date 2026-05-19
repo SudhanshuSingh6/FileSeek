@@ -10,12 +10,12 @@ public class Posting {
     private List<Integer> positions;
 
     public Posting(int docId) {
-        this.docId     = docId;
+        this.docId = docId;
         this.positions = new ArrayList<>();
     }
 
     public Posting(int docId, List<Integer> positions) {
-        this.docId     = docId;
+        this.docId = docId;
         this.positions = new ArrayList<>(positions);
     }
 

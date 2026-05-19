@@ -54,13 +54,13 @@ public class IndexDeserializer {
 
         int count = in.readInt();
         for (int i = 0; i < count; i++) {
-            int    docId        = in.readInt();
-            String path         = readString(in);
-            String fileName     = readString(in);
-            String extension    = readString(in);
-            long   sizeBytes    = in.readLong();
-            long   lastModified = in.readLong();
-            long   indexedAt    = in.readLong();
+            int docId = in.readInt();
+            String path = readString(in);
+            String fileName = readString(in);
+            String extension = readString(in);
+            long sizeBytes = in.readLong();
+            long lastModified = in.readLong();
+            long indexedAt = in.readLong();
 
             FileMetadata meta = new FileMetadata(
                     docId, path, fileName, extension, sizeBytes, lastModified);
@@ -74,8 +74,8 @@ public class IndexDeserializer {
 
         int termCount = in.readInt();
         for (int i = 0; i < termCount; i++) {
-            String term         = readString(in);
-            int    postingCount = in.readInt();
+            String term = readString(in);
+            int postingCount = in.readInt();
 
             List<Posting> postings = new ArrayList<>(postingCount);
             for (int j = 0; j < postingCount; j++) {
