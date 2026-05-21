@@ -3,86 +3,88 @@ package com.fileseek.scanner;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class ScanResult {
 
-    private int filesIndexed = 0;
-    private int filesUpdated = 0;
-    private int filesRemoved = 0;
-    private int filesSkipped = 0;
-    private int metadataOnly = 0;
-    private int directoriesScanned = 0;
-    private int errors = 0;
-    private long durationMs = 0;
-    private final List<String> errorMessages = new ArrayList<>();
-
-    public void setFilesRemoved(int count) {
-        filesRemoved = count;
-    }
+    private final AtomicInteger filesIndexed = new AtomicInteger();
+    private final AtomicInteger filesUpdated = new AtomicInteger();
+    private final AtomicInteger filesRemoved = new AtomicInteger();
+    private final AtomicInteger filesSkipped = new AtomicInteger();
+    private final AtomicInteger metadataOnly = new AtomicInteger();
+    private final AtomicInteger directoriesScanned = new AtomicInteger();
+    private final AtomicInteger errors = new AtomicInteger();
+    private final List<String> errorMessages =
+            Collections.synchronizedList(new ArrayList<>());
+    private volatile long durationMs = 0;
 
     public void incrementIndexed() {
-        filesIndexed++;
+        filesIndexed.incrementAndGet();
     }
 
     public void incrementUpdated() {
-        filesUpdated++;
+        filesUpdated.incrementAndGet();
     }
 
     public void incrementRemoved() {
-        filesRemoved++;
+        filesRemoved.incrementAndGet();
     }
 
     public void incrementSkipped() {
-        filesSkipped++;
+        filesSkipped.incrementAndGet();
     }
 
     public void incrementMetadata() {
-        metadataOnly++;
+        metadataOnly.incrementAndGet();
     }
 
     public void incrementDirectories() {
-        directoriesScanned++;
+        directoriesScanned.incrementAndGet();
     }
 
     public void incrementErrors() {
-        errors++;
+        errors.incrementAndGet();
     }
 
     public void addError(String msg) {
         errorMessages.add(msg);
-        errors++;
+        errors.incrementAndGet();
     }
 
     public void setDurationMs(long ms) {
         durationMs = ms;
     }
 
+    public void setFilesRemoved(int n) {
+        filesRemoved.set(n);
+    }
+
     public int getFilesIndexed() {
-        return filesIndexed;
+        return filesIndexed.get();
     }
 
     public int getFilesUpdated() {
-        return filesUpdated;
+        return filesUpdated.get();
     }
 
     public int getFilesRemoved() {
-        return filesRemoved;
+        return filesRemoved.get();
     }
 
     public int getFilesSkipped() {
-        return filesSkipped;
+        return filesSkipped.get();
     }
 
     public int getMetadataOnly() {
-        return metadataOnly;
+        return metadataOnly.get();
     }
 
     public int getDirectoriesScanned() {
-        return directoriesScanned;
+        return directoriesScanned.get();
     }
 
     public int getErrors() {
-        return errors;
+        return errors.get();
     }
 
     public long getDurationMs() {
@@ -94,14 +96,15 @@ public class ScanResult {
     }
 
     public int totalProcessed() {
-        return filesIndexed + filesUpdated + filesSkipped + metadataOnly;
+        return filesIndexed.get() + filesUpdated.get()
+                + filesSkipped.get() + metadataOnly.get();
     }
 
     @Override
     public String toString() {
         return String.format(
-                "Indexed %d  Updated %d  Removed %d  Skipped %d  Errors %d  (%.2fs)",
-                filesIndexed, filesUpdated, filesRemoved,
-                filesSkipped, errors, durationMs / 1000.0);
+                "Indexed %,d  Updated %,d  Removed %,d  Skipped %,d  Errors %d  (%.2fs)",
+                filesIndexed.get(), filesUpdated.get(), filesRemoved.get(),
+                filesSkipped.get(), errors.get(), durationMs / 1000.0);
     }
 }
