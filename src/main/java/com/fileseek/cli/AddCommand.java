@@ -6,73 +6,87 @@ import com.fileseek.config.ConfigManager;
 import com.fileseek.index.IndexManager;
 import com.fileseek.scanner.DirectoryScanner;
 import com.fileseek.scanner.ScanResult;
+import com.fileseek.storage.IndexLock;
+import com.fileseek.util.PathUtils;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Parameters;
 
 import java.nio.file.*;
+import java.util.concurrent.Callable;
 
 @Command(
         name = "add",
         mixinStandardHelpOptions = true,
         description = "Add a directory to the FileSeek index."
 )
-public class AddCommand implements Runnable {
+public class AddCommand implements Callable<Integer> {
 
     @Parameters(index = "0", description = "Directory path to add.")
     private String path;
 
     @Override
-    public void run() {
-        String resolved = path.replace("~", System.getProperty("user.home"));
-        Path dir = Path.of(resolved);
-
-        if (!Files.isDirectory(dir)) {
-            System.err.println("Error: not a directory: " + resolved);
-            return;
+    public Integer call() {
+        Path dir;
+        try {
+            dir = PathUtils.expand(path);
+        } catch (Exception e) {
+            System.err.println("[error] Invalid path: " + path);
+            return 2;
         }
 
-        AppConfig config = ConfigManager.load();
-        config.addWatchedDirectory(dir.toAbsolutePath().toString());
-        ConfigManager.save(config);
-        System.out.println("Added: " + dir.toAbsolutePath());
+        if (!Files.isDirectory(dir)) {
+            System.err.printf(
+                    "[error] '%s' is not a directory or does not exist.%n"
+                            + "        Check the path and try again.%n", dir);
+            return 2;
+        }
 
-        // Pass 1 — count so the progress bar has a total
-        DirectoryScanner scanner = new DirectoryScanner();
-        System.out.print("Counting files... ");
-        int total = scanner.countIndexableFiles(dir, config);
-        System.out.printf("%,d files found%n", total);
+        IndexLock lock = new IndexLock();
+        if (!lock.acquire()) return 1;
 
-        // Load existing index
-        IndexManager indexManager = new IndexManager();
-        indexManager.load();
+        try {
+            AppConfig config = ConfigManager.load();
+            config.addWatchedDirectory(dir.toString());
+            ConfigManager.save(config);
+            System.out.println("Added: " + dir);
 
-        // Pass 2 — index with progress bar
-        ProgressBar bar = new ProgressBar(total);
-        long startMs = System.currentTimeMillis();
+            DirectoryScanner scanner = new DirectoryScanner();
+            System.out.print("Counting files... ");
+            int total = scanner.countIndexableFiles(dir, config);
+            System.out.printf("%,d files found%n", total);
 
-        ScanResult result = indexManager.indexDirectory(dir, config,
-                (count, file) -> bar.update(count, Path.of(file).getFileName().toString()));
+            IndexManager indexManager = new IndexManager();
+            indexManager.load();
 
-        bar.complete(result.getFilesIndexed() + result.getFilesUpdated(),
-                System.currentTimeMillis() - startMs);
+            ProgressBar bar = new ProgressBar(total);
+            long startMs = System.currentTimeMillis();
 
-        // Summary
-        System.out.printf("  %,d new  |  %,d updated  |  %,d removed  |  %d errors%n",
-                result.getFilesIndexed(),
-                result.getFilesUpdated(),
-                result.getFilesRemoved(),
-                result.getErrors());
+            ScanResult result = indexManager.indexDirectory(dir, config,
+                    (count, file) ->
+                            bar.update(count, Path.of(file).getFileName().toString()));
 
-        // Save
-        System.out.print("Saving index... ");
-        long saveStart = System.currentTimeMillis();
-        indexManager.save();
-        System.out.printf("done (%.2fs)%n",
-                (System.currentTimeMillis() - saveStart) / 1000.0);
+            bar.complete(
+                    result.getFilesIndexed() + result.getFilesUpdated(),
+                    System.currentTimeMillis() - startMs);
 
-        // Index stats
-        System.out.printf("%nIndex: %,d documents  |  %,d unique terms%n",
-                indexManager.documentCount(),
-                indexManager.termCount());
+            System.out.printf(
+                    "  %,d new  |  %,d updated  |  %,d removed  |  %d errors%n",
+                    result.getFilesIndexed(), result.getFilesUpdated(),
+                    result.getFilesRemoved(), result.getErrors());
+
+            System.out.print("Saving index... ");
+            long saveStart = System.currentTimeMillis();
+            indexManager.save();
+            System.out.printf("done (%.2fs)%n",
+                    (System.currentTimeMillis() - saveStart) / 1000.0);
+
+            System.out.printf("%nIndex: %,d documents  |  %,d unique terms%n",
+                    indexManager.documentCount(), indexManager.termCount());
+
+            return 0;
+
+        } finally {
+            lock.release();
+        }
     }
 }

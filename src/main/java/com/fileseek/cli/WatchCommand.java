@@ -4,6 +4,7 @@ import com.fileseek.config.AppConfig;
 import com.fileseek.config.ConfigManager;
 import com.fileseek.index.IndexManager;
 import com.fileseek.scanner.FileSystemWatcher;
+import com.fileseek.storage.IndexLock;
 import picocli.CommandLine.Command;
 
 import java.io.IOException;
@@ -16,8 +17,12 @@ import java.nio.file.Path;
 )
 public class WatchCommand implements Runnable {
 
+    IndexLock lock = new IndexLock();
+
     @Override
     public void run() {
+        if (!lock.acquire())
+            return;
         if (!IndexManager.indexExists()) {
             System.out.println("No index found. Run 'fileseek add <directory>' first.");
             return;
@@ -67,6 +72,7 @@ public class WatchCommand implements Runnable {
             System.out.println("\nSaving index...");
             watcher.stop();
             indexManager.save();
+            lock.release();
             System.out.println("Index saved. Goodbye.");
         }));
 

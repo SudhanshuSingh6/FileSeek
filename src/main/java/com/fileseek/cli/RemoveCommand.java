@@ -2,6 +2,7 @@ package com.fileseek.cli;
 
 import com.fileseek.config.AppConfig;
 import com.fileseek.config.ConfigManager;
+import com.fileseek.util.PathUtils;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Parameters;
 
@@ -20,7 +21,7 @@ public class RemoveCommand implements Runnable {
     @Override
     public void run() {
         String resolved = path.replace("~", System.getProperty("user.home"));
-        String absolute = Path.of(resolved).toAbsolutePath().toString();
+        String absolute = PathUtils.expand(path).toString();
 
         AppConfig config = ConfigManager.load();
         boolean removed = config.removeWatchedDirectory(absolute);

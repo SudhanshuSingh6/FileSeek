@@ -3,6 +3,7 @@ package com.fileseek.scanner;
 import com.fileseek.config.AppConfig;
 import com.fileseek.index.IndexManager;
 import com.fileseek.model.FileMetadata;
+import com.fileseek.util.PathUtils;
 import com.fileseek.util.Tokenizer;
 
 import java.io.IOException;
@@ -70,12 +71,20 @@ public class DirectoryScanner {
     }
 
     public int removeDeletedDocuments(Path rootDir, IndexManager indexManager) {
-        String root = rootDir.toAbsolutePath().toString();
+        Path normalizedRoot = rootDir.toAbsolutePath().normalize();
 
         List<String> toRemove = indexManager.getDocumentStore()
                 .getAllDocuments()
                 .stream()
-                .filter(meta -> meta.getPath().startsWith(root))
+                .filter(meta -> {
+                    try {
+                        // PathUtils.isUnder uses Path.startsWith — correct on all platforms
+                        return PathUtils.isUnder(
+                                Path.of(meta.getPath()), normalizedRoot);
+                    } catch (Exception e) {
+                        return false;
+                    }
+                })
                 .filter(meta -> !Files.exists(Path.of(meta.getPath())))
                 .map(FileMetadata::getPath)
                 .collect(Collectors.toList());
