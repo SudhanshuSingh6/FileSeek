@@ -11,14 +11,15 @@ import java.nio.charset.StandardCharsets;
         name = "fileseek",
         mixinStandardHelpOptions = true,
         version = "FileSeek 1.0",
-        description = "A fast local file indexing and full-text search engine.",
         subcommands = {
                 SearchCommand.class,
                 AddCommand.class,
                 RemoveCommand.class,
                 ConfigCommand.class,
                 ResetCommand.class,
-                WatchCommand.class,          // added
+                WatchCommand.class,
+                HistoryCommand.class,
+                StatsCommand.class,
                 CommandLine.HelpCommand.class
         }
 )

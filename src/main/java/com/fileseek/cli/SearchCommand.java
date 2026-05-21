@@ -6,6 +6,7 @@ import com.fileseek.model.FileMetadata;
 import com.fileseek.model.QueryOptions;
 import com.fileseek.model.SearchResult;
 import com.fileseek.search.SearchEngine;
+import com.fileseek.util.SearchHistory;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
@@ -37,6 +38,10 @@ public class SearchCommand implements Runnable {
     @Option(names = "--prefix",
             description = "Enable prefix/autocomplete matching.")
     private boolean prefix;
+
+    @Option(names = "--regex",
+            description = "Treat query as a regular expression (token-level matching).")
+    private boolean regex;
 
     @Option(names = "--ext",
             description = "Filter by file extension (e.g. .java).")
@@ -76,6 +81,8 @@ public class SearchCommand implements Runnable {
         spinner.stop();
 
         printResults(results);
+        SearchHistory.append(query);
+
     }
 
     private void printResults(List<SearchResult> results) {
@@ -153,6 +160,7 @@ public class SearchCommand implements Runnable {
                 .filterExt(extension)
                 .minSizeBytes(parseSize(minSize))
                 .modifiedAfterEpoch(parseDuration(modifiedAfter))
+                .regex(regex)
                 .build();
     }
 

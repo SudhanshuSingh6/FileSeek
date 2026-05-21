@@ -15,11 +15,11 @@ public class FuzzySearch {
 
     private final InvertedIndex invertedIndex;
     private final DocumentStore documentStore;
-    private final TfIdfScorer scorer;
+    private final BM25Scorer scorer;
 
     public FuzzySearch(InvertedIndex invertedIndex,
                        DocumentStore documentStore,
-                       TfIdfScorer scorer) {
+                       BM25Scorer scorer) {
         this.invertedIndex = invertedIndex;
         this.documentStore = documentStore;
         this.scorer = scorer;
@@ -35,22 +35,23 @@ public class FuzzySearch {
             for (FuzzyMatch match : candidates) {
                 List<Posting> postings = invertedIndex.getPostings(match.term());
                 int df = postings.size();
-                double idf = scorer.idf(totalDocs, df);
                 double distMultiplier = DISTANCE_MULTIPLIER[match.distance()];
 
                 for (Posting posting : postings) {
-                    double tf = scorer.tf(posting.frequency());
-                    double termScore = tf * idf * distMultiplier;
+                    // BM25 score — passes docId so scorer can look up doc length
+                    double termScore = scorer.score(
+                            posting.frequency(), posting.docId(), totalDocs, df);
+                    termScore *= distMultiplier;
 
+                    double finalTermScore = termScore;
                     documentStore.getDocument(posting.docId()).ifPresent(meta -> {
                         double boost = meta.getFileName().toLowerCase()
                                 .contains(match.term()) ? FILENAME_BOOST : 1.0;
-                        scores.merge(posting.docId(), termScore * boost, Double::sum);
+                        scores.merge(posting.docId(), finalTermScore * boost, Double::sum);
                     });
                 }
             }
         }
-
         return scores;
     }
 

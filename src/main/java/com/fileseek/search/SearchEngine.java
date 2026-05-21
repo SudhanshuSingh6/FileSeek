@@ -7,6 +7,7 @@ import com.fileseek.model.FileMetadata;
 import com.fileseek.model.Posting;
 import com.fileseek.model.QueryOptions;
 import com.fileseek.model.SearchResult;
+import com.fileseek.search.BM25Scorer;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -19,18 +20,21 @@ public class SearchEngine {
 
     private final InvertedIndex invertedIndex;
     private final DocumentStore documentStore;
-    private final TfIdfScorer scorer;
     private final SnippetExtractor snippetExtractor;
     private final FuzzySearch fuzzySearch;
     private final PrefixSearch prefixSearch;
+    private final BM25Scorer scorer;
+    private final RegexSearch regexSearch;
+
 
     public SearchEngine(IndexManager indexManager) {
         this.invertedIndex = indexManager.getInvertedIndex();
         this.documentStore = indexManager.getDocumentStore();
-        this.scorer = new TfIdfScorer();
+        this.scorer = new BM25Scorer(documentStore);   // was TfIdfScorer
         this.snippetExtractor = new SnippetExtractor();
         this.fuzzySearch = new FuzzySearch(invertedIndex, documentStore, scorer);
         this.prefixSearch = new PrefixSearch(invertedIndex, documentStore, scorer);
+        this.regexSearch = new RegexSearch(invertedIndex, documentStore, scorer);
     }
 
     public List<SearchResult> search(QueryOptions options) {
@@ -69,8 +73,9 @@ public class SearchEngine {
 
 
     private Map<Integer, Double> route(QueryParser.ParsedQuery query, QueryOptions options) {
-        if (query.isPhrase()) return phraseSearch(query.getTerms());
-        if (options.isFuzzy()) return fuzzySearch.search(query.getTerms());
+        if (options.isRegex())  return regexSearch.search(options.getRawQuery());
+        if (query.isPhrase())   return phraseSearch(query.getTerms());
+        if (options.isFuzzy())  return fuzzySearch.search(query.getTerms());
         if (options.isPrefix()) return prefixSearch.search(query.getTerms());
         return keywordSearch(query.getTerms());
     }
@@ -84,11 +89,9 @@ public class SearchEngine {
             int df = postings.size();
             if (df == 0) continue;
 
-            double idf = scorer.idf(totalDocs, df);
-
             for (Posting posting : postings) {
-                double tf = scorer.tf(posting.frequency());
-                double termScore = tf * idf;
+                double termScore = scorer.score(
+                        posting.frequency(), posting.docId(), totalDocs, df);
 
                 documentStore.getDocument(posting.docId()).ifPresent(meta -> {
                     double boost = filenameBoost(meta.getFileName(), term);
@@ -96,7 +99,6 @@ public class SearchEngine {
                 });
             }
         }
-
         return scores;
     }
 
@@ -126,7 +128,7 @@ public class SearchEngine {
                 int df = invertedIndex.documentFrequency(term);
                 for (Posting p : invertedIndex.getPostings(term)) {
                     if (p.docId() == docId) {
-                        docScore += scorer.score(p.frequency(), totalDocs, df);
+                        docScore += scorer.score(p.frequency(), p.docId(), totalDocs, df);
                         break;
                     }
                 }

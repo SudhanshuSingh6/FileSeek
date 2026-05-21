@@ -9,6 +9,7 @@ public class QueryOptions {
     private String filterExt;
     private Long minSizeBytes;
     private Long modifiedAfterEpoch;
+    private final boolean regex;
 
     private QueryOptions(Builder builder) {
         this.rawQuery = builder.rawQuery;
@@ -18,11 +19,14 @@ public class QueryOptions {
         this.filterExt = builder.filterExt;
         this.minSizeBytes = builder.minSizeBytes;
         this.modifiedAfterEpoch = builder.modifiedAfterEpoch;
+        this.regex = builder.regex;
+
     }
 
     public String getRawQuery() {
         return rawQuery;
     }
+    public boolean isRegex() { return regex; }
 
     public boolean isFuzzy() {
         return fuzzy;
@@ -73,6 +77,8 @@ public class QueryOptions {
         private String filterExt = null;
         private Long minSizeBytes = null;
         private Long modifiedAfterEpoch = null;
+        private boolean regex = false;
+
 
         public Builder(String rawQuery) {
             this.rawQuery = rawQuery;
@@ -106,6 +112,10 @@ public class QueryOptions {
         public Builder modifiedAfterEpoch(Long v) {
             this.modifiedAfterEpoch = v;
             return this;
+        }
+
+        public Builder regex(boolean v) {
+            this.regex = v; return this;
         }
 
         public QueryOptions build() {

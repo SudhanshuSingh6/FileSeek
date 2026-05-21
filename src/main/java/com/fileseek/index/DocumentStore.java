@@ -66,4 +66,13 @@ public class DocumentStore {
             nextDocId.set(metadata.getDocId() + 1);
         }
     }
+
+    public double averageDocumentLength() {
+        if (store.isEmpty()) return 1.0;
+        return store.values().stream()
+                .mapToInt(FileMetadata::getTokenCount)
+                .filter(n -> n > 0)
+                .average()
+                .orElse(1.0);
+    }
 }

@@ -51,7 +51,6 @@ public class IndexDeserializer {
 
     private void readDocumentStore(DataInputStream in, DocumentStore store)
             throws IOException {
-
         int count = in.readInt();
         for (int i = 0; i < count; i++) {
             int docId = in.readInt();
@@ -61,10 +60,12 @@ public class IndexDeserializer {
             long sizeBytes = in.readLong();
             long lastModified = in.readLong();
             long indexedAt = in.readLong();
+            int tokenCount = in.readInt();
 
             FileMetadata meta = new FileMetadata(
                     docId, path, fileName, extension, sizeBytes, lastModified);
             meta.setIndexedAt(indexedAt);
+            meta.setTokenCount(tokenCount);
             store.restoreDocument(meta);
         }
     }

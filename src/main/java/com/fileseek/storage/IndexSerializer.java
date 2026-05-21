@@ -14,7 +14,7 @@ import java.util.zip.GZIPOutputStream;
 public class IndexSerializer {
 
     static final int MAGIC = 0x46534558;
-    static final int VERSION = 1;
+    static final int VERSION = 2;
 
     private final Path indexFile;
 
@@ -51,10 +51,8 @@ public class IndexSerializer {
 
     private void writeDocumentStore(DataOutputStream out, DocumentStore store)
             throws IOException {
-
         var docs = store.getAllDocuments();
         out.writeInt(docs.size());
-
         for (FileMetadata meta : docs) {
             out.writeInt(meta.getDocId());
             writeString(out, meta.getPath());
@@ -63,6 +61,7 @@ public class IndexSerializer {
             out.writeLong(meta.getSizeBytes());
             out.writeLong(meta.getLastModified());
             out.writeLong(meta.getIndexedAt());
+            out.writeInt(meta.getTokenCount());
         }
     }
 
@@ -101,4 +100,5 @@ public class IndexSerializer {
         out.writeInt(bytes.length);
         out.write(bytes);
     }
+
 }

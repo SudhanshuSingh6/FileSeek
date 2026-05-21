@@ -52,7 +52,13 @@ public class IndexManager {
             System.out.printf("[info] Index loaded — %d documents, %d terms%n",
                     documentStore.size(), invertedIndex.termCount());
         } catch (IOException e) {
-            System.err.println("[error] Failed to load index: " + e.getMessage());
+            if (e.getMessage() != null && e.getMessage().contains("version")) {
+                System.err.println("[info] Index format has been updated (v1 → v2).");
+                System.err.println("[info] Run 'fileseek add <directory>' to rebuild.");
+            } else {
+                System.err.printf("[error] Failed to load index: %s%n", e.getMessage());
+                System.err.println("[info] Run 'fileseek add <directory>' to rebuild.");
+            }
             clear();
         }
     }
@@ -65,11 +71,13 @@ public class IndexManager {
         return INDEX_FILE;
     }
 
-    public void indexDocument(FileMetadata metadata, List<String> tokens) {
+    public int indexDocument(FileMetadata metadata, List<String> tokens) {
+        metadata.setTokenCount(tokens.size());
         int docId = documentStore.addDocument(metadata);
         for (int position = 0; position < tokens.size(); position++) {
             invertedIndex.addPosting(tokens.get(position), docId, position);
         }
+        return docId;
     }
 
     public ScanResult indexDirectory(
