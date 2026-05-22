@@ -1,5 +1,6 @@
 package com.fileseek.index;
 
+import com.fileseek.cli.FileSeekCommand;
 import com.fileseek.config.AppConfig;
 import com.fileseek.config.ConfigManager;
 import com.fileseek.model.FileMetadata;
@@ -46,18 +47,29 @@ public class IndexManager {
             return;
         }
 
+        long startMs = System.currentTimeMillis();
         try {
             new IndexDeserializer(INDEX_FILE)
                     .deserialize(documentStore, invertedIndex);
-            System.out.printf("[info] Index loaded — %d documents, %d terms%n",
-                    documentStore.size(), invertedIndex.termCount());
+
+            long loadMs = System.currentTimeMillis() - startMs;
+            if (FileSeekCommand.verbose) {
+                System.out.printf(
+                        "  [verbose] Index loaded in %dms — "
+                                + "%,d documents, %,d terms, file: %s%n",
+                        loadMs, documentStore.size(), invertedIndex.termCount(),
+                        INDEX_FILE.getFileName());
+            }
         } catch (IOException e) {
             if (e.getMessage() != null && e.getMessage().contains("version")) {
-                System.err.println("[info] Index format has been updated (v1 → v2).");
-                System.err.println("[info] Run 'fileseek add <directory>' to rebuild.");
+                System.err.println(
+                        "[info] Index format updated (v1 → v2).\n"
+                                + "       Run 'fileseek add <directory>' to rebuild.");
             } else {
-                System.err.printf("[error] Failed to load index: %s%n", e.getMessage());
-                System.err.println("[info] Run 'fileseek add <directory>' to rebuild.");
+                System.err.printf(
+                        "[error] Failed to load index: %s%n"
+                                + "        Run 'fileseek add <directory>' to rebuild.%n",
+                        e.getMessage());
             }
             clear();
         }

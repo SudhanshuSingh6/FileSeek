@@ -1,20 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# -------------------------------------------------------
-# FileSeek install script
-# Builds the fat jar and installs a wrapper to ~/bin
-# or /usr/local/bin (if run with sudo).
-# -------------------------------------------------------
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-
-cd "$PROJECT_ROOT"
-JAR_TARGET="target/fileseek.jar"
 JAR_DEST_DIR="$HOME/.fileseek/bin"
-WRAPPER="/usr/local/bin/fileseek"
-LOCAL_WRAPPER="$HOME/bin/fileseek"
+COMPLETION_FILE="$HOME/.fileseek/completion.sh"
 
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -24,69 +12,144 @@ NC='\033[0m'
 log()  { echo -e "${GREEN}==>${NC} $1"; }
 warn() { echo -e "${YELLOW}[warn]${NC} $1"; }
 err()  { echo -e "${RED}[error]${NC} $1"; exit 1; }
-err()  { echo -e "${RED}[error]${NC} $1"; exit 1; }
 
-# --- Requirements ---
-command -v java  >/dev/null 2>&1 || err "Java not found. Install Java 17+."
-command -v mvn   >/dev/null 2>&1 || err "Maven not found. Install Maven 3.8+."
+# --- requirements ---
+command -v java >/dev/null 2>&1 || err "Java not found. Install Java 17+."
+command -v mvn  >/dev/null 2>&1 || err "Maven not found. Install Maven 3.8+."
 
-JAVA_VERSION=$(java -version 2>&1 | awk -F '"' '/version/ {print $2}' | cut -d'.' -f1)
-if [ "$JAVA_VERSION" -lt 17 ] 2>/dev/null; then
-    err "Java 17+ required. Found Java $JAVA_VERSION."
-fi
+JAVA_VER=$(java -version 2>&1 | awk -F'"' '/version/{print $2}' | cut -d'.' -f1)
 
-# --- Build ---
+[ "$JAVA_VER" -ge 17 ] 2>/dev/null \
+    || err "Java 17+ required. Found Java $JAVA_VER."
+
+# --- project root ---
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+cd "$PROJECT_ROOT" || err "Could not enter project root."
+
+# --- build ---
 log "Building FileSeek..."
-mvn package -q -DskipTests || err "Build failed. Run 'mvn package' to see errors."
+
+mvn package -q -DskipTests \
+    || err "Build failed. Run 'mvn package' for details."
+
 log "Build complete."
 
-# --- Install jar ---
+# --- install jar ---
 mkdir -p "$JAR_DEST_DIR"
-cp "$JAR_TARGET" "$JAR_DEST_DIR/fileseek.jar"
-log "Jar installed to $JAR_DEST_DIR/fileseek.jar"
 
-# --- Install wrapper ---
-WRAPPER_CONTENT="#!/usr/bin/env bash
-exec java -jar \"$JAR_DEST_DIR/fileseek.jar\" \"\$@\""
+cp target/fileseek.jar "$JAR_DEST_DIR/fileseek.jar"
+
+log "Installed jar to $JAR_DEST_DIR/fileseek.jar"
+
+WRAPPER="#!/usr/bin/env bash
+FILESEEK_OPTS=\"\${FILESEEK_OPTS:--Xmx512m -Xms64m -XX:+UseG1GC -XX:+TieredCompilation}\"
+exec java \$FILESEEK_OPTS -jar \"$JAR_DEST_DIR/fileseek.jar\" \"\$@\"
+"
 
 install_global() {
-    echo "$WRAPPER_CONTENT" | sudo tee "$WRAPPER" > /dev/null
-    sudo chmod +x "$WRAPPER"
-    log "Installed to $WRAPPER (system-wide)"
+    echo "$WRAPPER" | sudo tee /usr/local/bin/fileseek > /dev/null
+    sudo chmod +x /usr/local/bin/fileseek
+
+    log "Installed to /usr/local/bin/fileseek (system-wide)"
 }
 
 install_local() {
     mkdir -p "$HOME/bin"
-    echo "$WRAPPER_CONTENT" > "$LOCAL_WRAPPER"
-    chmod +x "$LOCAL_WRAPPER"
-    log "Installed to $LOCAL_WRAPPER (user-only)"
 
-    # Check if ~/bin is on PATH
+    echo "$WRAPPER" > "$HOME/bin/fileseek"
+
+    chmod +x "$HOME/bin/fileseek"
+
+    log "Installed to ~/bin/fileseek (user-only)"
+
     if [[ ":$PATH:" != *":$HOME/bin:"* ]]; then
         warn "~/bin is not on your PATH."
         warn "Add this to your shell profile:"
-        warn "  export PATH=\"\$HOME/bin:\$PATH\""
+        warn "export PATH=\"\$HOME/bin:\$PATH\""
     fi
 }
 
 if [ "$EUID" -eq 0 ]; then
+
     install_global
+
 elif command -v sudo >/dev/null 2>&1; then
-    read -rp "Install system-wide to /usr/local/bin? (requires sudo) [y/N]: " choice
+
+    read -rp "Install system-wide? (requires sudo) [y/N]: " choice
+
     if [[ "$choice" =~ ^[Yy]$ ]]; then
         install_global
     else
         install_local
     fi
+
 else
+
     install_local
+
 fi
 
-echo ""
-log "FileSeek installed successfully."
-echo ""
-echo "  fileseek --help         show all commands"
-echo "  fileseek add ~/Projects index a directory"
-echo "  fileseek search \"redis\" search the index"
-echo "  fileseek watch          live index updates"
-echo ""
+# --- shell completion ---
+log "Generating shell completion..."
+
+mkdir -p "$(dirname "$COMPLETION_FILE")"
+
+PICOCLI_JAR="$HOME/.m2/repository/info/picocli/picocli/4.7.6/picocli-4.7.6.jar"
+
+java -cp "$JAR_DEST_DIR/fileseek.jar:$PICOCLI_JAR" \
+    picocli.AutoComplete \
+    -f \
+    -o "$COMPLETION_FILE" \
+    com.fileseek.cli.FileSeekCommand \
+    || warn "Could not generate completion."
+
+SHELL_NAME=$(basename "$SHELL")
+PROFILE=""
+
+case "$SHELL_NAME" in
+    zsh)
+        PROFILE="$HOME/.zshrc"
+        ;;
+    bash)
+        PROFILE="$HOME/.bashrc"
+        ;;
+esac
+
+if [ -n "$PROFILE" ]; then
+    if [ "$SHELL_NAME" = "zsh" ]; then
+        grep -q "FileSeek completion" "$PROFILE" 2>/dev/null || {
+            {
+                echo ""
+                echo "# FileSeek completion"
+                echo "autoload -Uz compinit"
+                echo "compinit"
+                echo "autoload -U bashcompinit"
+                echo "bashcompinit"
+                echo "source \"$COMPLETION_FILE\""
+            } >> "$PROFILE"
+        }
+
+    else
+
+        SOURCE_LINE="source \"$COMPLETION_FILE\""
+
+        grep -qF "$SOURCE_LINE" "$PROFILE" 2>/dev/null || {
+            {
+                echo ""
+                echo "# FileSeek completion"
+                echo "$SOURCE_LINE"
+            } >> "$PROFILE"
+        }
+
+    fi
+
+    log "Shell completion configured."
+
+else
+    warn "Unknown shell '$SHELL_NAME'."
+    warn "Manually add:"
+    warn "source \"$COMPLETION_FILE\""
+
+fi

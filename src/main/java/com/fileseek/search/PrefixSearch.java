@@ -13,49 +13,69 @@ public class PrefixSearch {
 
     private final InvertedIndex invertedIndex;
     private final DocumentStore documentStore;
-    private final BM25Scorer    scorer;
+    private final BM25Scorer scorer;
 
-    public PrefixSearch(InvertedIndex invertedIndex,
-                        DocumentStore documentStore,
-                        BM25Scorer    scorer) {
+    public PrefixSearch(
+            InvertedIndex invertedIndex,
+            DocumentStore documentStore,
+            BM25Scorer scorer
+    ) {
         this.invertedIndex = invertedIndex;
         this.documentStore = documentStore;
-        this.scorer        = scorer;
+        this.scorer = scorer;
     }
 
     public Map<Integer, Double> search(List<String> prefixes) {
-        Map<Integer, Double> scores    = new HashMap<>();
-        int                  totalDocs = documentStore.size();
-
+        Map<Integer, Double> scores = new HashMap<>();
+        int totalDocs = documentStore.size();
         for (String prefix : prefixes) {
             List<String> matchingTerms = findMatchingTerms(prefix);
-
             for (String term : matchingTerms) {
                 List<Posting> postings = invertedIndex.getPostings(term);
-                int    df             = postings.size();
-                double coverageBoost  = (double) prefix.length() / term.length();
-
+                int df = postings.size();
+                double coverageBoost =
+                        (double) prefix.length() / term.length();
                 for (Posting posting : postings) {
                     double termScore = scorer.score(
-                            posting.frequency(), posting.docId(), totalDocs, df);
+                            posting.frequency(),
+                            posting.docId(),
+                            totalDocs,
+                            df
+                    );
                     termScore *= coverageBoost;
+                    double finalTermScore = termScore;
+                    documentStore.getDocument(posting.docId())
+                            .ifPresent(meta -> {
+                                double filenameBoost =
+                                        meta.getFileName()
+                                                .toLowerCase()
+                                                .contains(term)
+                                                ? FILENAME_BOOST
+                                                : 1.0;
 
-                    documentStore.getDocument(posting.docId()).ifPresent(meta -> {
-                        double filenameBoost = meta.getFileName().toLowerCase()
-                                .contains(term) ? FILENAME_BOOST : 1.0;
-                        scores.merge(posting.docId(), termScore * filenameBoost,
-                                Double::sum);
-                    });
+                                scores.merge(
+                                        posting.docId(),
+                                        finalTermScore * filenameBoost,
+                                        Double::sum
+                                );
+                            });
                 }
             }
         }
+
         return scores;
     }
 
     List<String> findMatchingTerms(String prefix) {
-        if (prefix == null || prefix.isBlank()) return List.of();
-        return invertedIndex.getAllTerms().stream()
+
+        if (prefix == null || prefix.isBlank()) {
+            return List.of();
+        }
+
+        return invertedIndex.getAllTerms()
+                .stream()
                 .filter(term -> term.startsWith(prefix))
+                .sorted(Comparator.comparingInt(String::length))
                 .collect(Collectors.toList());
     }
 }

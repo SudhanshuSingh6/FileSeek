@@ -1,6 +1,5 @@
 package com.fileseek.cli;
 
-import com.fileseek.cli.display.Spinner;
 import com.fileseek.index.IndexManager;
 import com.fileseek.model.FileMetadata;
 import com.fileseek.model.QueryOptions;
@@ -12,107 +11,139 @@ import picocli.CommandLine.Option;
 import picocli.CommandLine.Parameters;
 
 import java.util.List;
+import java.util.concurrent.Callable;
 
 @Command(
         name = "search",
         mixinStandardHelpOptions = true,
         description = "Search indexed files by content, filename, or folder."
 )
-public class SearchCommand implements Runnable {
+public class SearchCommand implements Callable<Integer> {
 
     private static final String ANSI_RESET = "\u001B[0m";
     private static final String ANSI_BOLD = "\u001B[1m";
     private static final String ANSI_DIM = "\u001B[2m";
     private static final String ANSI_CYAN = "\u001B[36m";
     private static final String ANSI_YELLOW = "\u001B[33m";
-    private static final String ANSI_GREEN = "\u001B[32m";
-    private static final String ANSI_RED = "\u001B[31m";
 
-    @Parameters(index = "0", description = "Search query.")
+    @Parameters(index = "0", description = "Search query. "
+            + "Wrap in quotes for phrase search: \"spring boot\"")
     private String query;
 
     @Option(names = "--fuzzy",
-            description = "Enable fuzzy (typo-tolerant) matching.")
+            description = "Typo-tolerant matching (Levenshtein distance ≤ 2).")
     private boolean fuzzy;
 
     @Option(names = "--prefix",
-            description = "Enable prefix/autocomplete matching.")
+            description = "Prefix / autocomplete matching.")
     private boolean prefix;
 
     @Option(names = "--regex",
-            description = "Treat query as a regular expression (token-level matching).")
+            description = "Treat query as a regular expression (token-level).")
     private boolean regex;
 
     @Option(names = "--ext",
-            description = "Filter by file extension (e.g. .java).")
+            description = "Filter results by file extension, e.g. .java")
     private String extension;
 
     @Option(names = "--min-size",
-            description = "Filter by minimum file size (e.g. 1MB, 500KB).")
+            description = "Filter by minimum file size, e.g. 1MB, 500KB")
     private String minSize;
 
     @Option(names = "--modified-after",
-            description = "Filter files modified within duration (e.g. 7d, 30d).")
+            description = "Filter by modification recency, e.g. 7d, 24h")
     private String modifiedAfter;
 
     @Override
-    public void run() {
+    public Integer call() {
         if (!IndexManager.indexExists()) {
-            System.out.printf("%sNo index found.%s Run 'fileseek add <directory>' first.%n",
-                    ANSI_YELLOW, ANSI_RESET);
-            return;
+            System.err.println(
+                    "[error] No index found.\n"
+                            + "        Run 'fileseek add <directory>' to create one.");
+            return 2;
         }
 
-        IndexManager indexManager = new IndexManager();
-        indexManager.load();
+        // load index
+        long loadStart = System.currentTimeMillis();
+        IndexManager mgr = new IndexManager();
+        mgr.load();
+        long loadMs = System.currentTimeMillis() - loadStart;
 
-        if (indexManager.documentCount() == 0) {
-            System.out.printf("%sIndex is empty.%s Run 'fileseek add <directory>' first.%n",
-                    ANSI_YELLOW, ANSI_RESET);
-            return;
+        if (FileSeekCommand.verbose) {
+            System.out.printf("  [verbose] Index loaded in %dms — "
+                            + "%,d documents, %,d terms%n",
+                    loadMs, mgr.documentCount(), mgr.termCount());
         }
 
+        // --- guard: index populated ---
+        if (mgr.documentCount() == 0) {
+            System.err.println(
+                    "[error] Index is empty.\n"
+                            + "        Run 'fileseek add <directory>' to index your files.");
+            return 2;
+        }
+
+        // --- build options ---
         QueryOptions options = buildOptions();
-        SearchEngine engine = new SearchEngine(indexManager);
 
-        Spinner spinner = new Spinner("Searching");
-        spinner.start();
+        if (FileSeekCommand.verbose) {
+            System.out.printf("  [verbose] Raw query   : \"%s\"%n", query);
+            System.out.printf("  [verbose] Mode        : %s%n",
+                    detectMode(options));
+            if (options.hasExtFilter())
+                System.out.printf("  [verbose] Filter ext  : %s%n",
+                        options.getFilterExt());
+            if (options.hasSizeFilter())
+                System.out.printf("  [verbose] Filter size : ≥ %,d bytes%n",
+                        options.getMinSizeBytes());
+        }
+
+        SearchEngine engine = new SearchEngine(mgr);
         List<SearchResult> results = engine.search(options);
-        spinner.stop();
 
-        printResults(results);
+        if (FileSeekCommand.verbose) {
+            System.out.printf("  [verbose] Results     : %,d%n", results.size());
+            System.out.printf("  [verbose] Duration    : %dms%n",
+                    results.isEmpty() ? 0 : results.get(0).getSearchDurationMs());
+            System.out.println();
+        }
+
+        // record history
         SearchHistory.append(query);
 
+        printResults(results);
+
+        return results.isEmpty() ? 1 : 0;
     }
+
+    // --- display ---
 
     private void printResults(List<SearchResult> results) {
         System.out.println();
 
         if (results.isEmpty()) {
-            System.out.printf("%sNo results%s found for \"%s\"%n%n",
-                    ANSI_YELLOW, ANSI_RESET, query);
+            System.out.printf(
+                    "%sNo results%s for \"%s\"%n%n", ANSI_YELLOW, ANSI_RESET, query);
             printSearchTips();
             return;
         }
 
         long durationMs = results.get(0).getSearchDurationMs();
-        System.out.printf("%sFound %,d result%s%s for \"%s\" %s(%dms)%s%n%n",
+        System.out.printf("%sFound %,d result%s%s for \"%s\" "
+                        + "%s(%dms)%s%n%n",
                 ANSI_BOLD, results.size(),
                 results.size() == 1 ? "" : "s",
-                ANSI_RESET,
-                query,
+                ANSI_RESET, query,
                 ANSI_DIM, durationMs, ANSI_RESET);
 
         for (int i = 0; i < results.size(); i++) {
             printResult(i + 1, results.get(i));
         }
 
-        System.out.printf("%s%,d result%s in %dms  |  index: %,d documents%s%n%n",
+        System.out.printf("%s%,d result%s · %dms%s%n%n",
                 ANSI_DIM,
-                results.size(),
-                results.size() == 1 ? "" : "s",
+                results.size(), results.size() == 1 ? "" : "s",
                 results.get(0).getSearchDurationMs(),
-                results.size(),
                 ANSI_RESET);
     }
 
@@ -121,15 +152,12 @@ public class SearchCommand implements Runnable {
 
         System.out.printf("%s[%d] %s%s%n",
                 ANSI_BOLD, rank, meta.getFileName(), ANSI_RESET);
-
         System.out.printf("    %s%s%s%n",
                 ANSI_DIM, meta.getPath(), ANSI_RESET);
-
-        System.out.printf("    %s%s  ·  %s  ·  modified %s  ·  score %.4f%s%n",
+        System.out.printf("    %s%s · %s · %s · score %.4f%s%n",
                 ANSI_DIM,
                 meta.getExtension().isEmpty() ? "no ext" : meta.getExtension(),
                 formatSize(meta.getSizeBytes()),
-
                 formatAge(meta.getLastModified()),
                 result.getScore(),
                 ANSI_RESET);
@@ -139,33 +167,52 @@ public class SearchCommand implements Runnable {
                     ANSI_CYAN, result.getSnippet(), ANSI_RESET);
         }
 
+        if (FileSeekCommand.verbose) {
+            System.out.printf("    %s[verbose] docId=%d  tokens=%d%s%n",
+                    ANSI_DIM,
+                    meta.getDocId(), meta.getTokenCount(),
+                    ANSI_RESET);
+        }
+
         System.out.println();
     }
 
     private void printSearchTips() {
-        System.out.println("Tips:");
-        System.out.println("  fileseek search \"term\" --fuzzy    typo-tolerant search");
-        System.out.println("  fileseek search \"term\" --prefix   prefix/autocomplete");
-        System.out.println("  fileseek search \"\\\"exact phrase\\\"\" phrase search");
-        System.out.println("  fileseek search \"term\" --ext .java  filter by extension");
+        System.out.println("Suggestions:");
+        System.out.printf("  %-42s typo-tolerant%n",
+                "fileseek search \"" + query + "\" --fuzzy");
+        System.out.printf("  %-42s prefix match%n",
+                "fileseek search \"" + query + "\" --prefix");
+        System.out.printf("  %-42s phrase match%n",
+                "fileseek search \"\\\"" + query + "\\\"\"");
         System.out.println();
     }
 
+    // --- option parsing ---
 
     private QueryOptions buildOptions() {
         return QueryOptions.builder(query)
                 .fuzzy(fuzzy)
                 .prefix(prefix)
                 .phrase(isPhrase(query))
+                .regex(regex)
                 .filterExt(extension)
                 .minSizeBytes(parseSize(minSize))
                 .modifiedAfterEpoch(parseDuration(modifiedAfter))
-                .regex(regex)
                 .build();
     }
 
     private boolean isPhrase(String q) {
-        return q != null && q.startsWith("\"") && q.endsWith("\"") && q.length() > 2;
+        return q != null && q.startsWith("\"") && q.endsWith("\"")
+                && q.length() > 2;
+    }
+
+    private String detectMode(QueryOptions options) {
+        if (options.isRegex()) return "regex";
+        if (options.isPhrase()) return "phrase";
+        if (options.isFuzzy()) return "fuzzy";
+        if (options.isPrefix()) return "prefix";
+        return "keyword";
     }
 
     private Long parseSize(String s) {
@@ -177,8 +224,9 @@ public class SearchCommand implements Runnable {
             if (u.endsWith("KB")) return Long.parseLong(u.replace("KB", "")) << 10;
             return Long.parseLong(u);
         } catch (NumberFormatException e) {
-            System.err.printf("%s[warn]%s Could not parse size: %s%n",
-                    ANSI_YELLOW, ANSI_RESET, s);
+            System.err.printf(
+                    "[error] Cannot parse size \"%s\". "
+                            + "Use a number followed by KB, MB, or GB.%n", s);
             return null;
         }
     }
@@ -187,21 +235,20 @@ public class SearchCommand implements Runnable {
         if (s == null || s.isBlank()) return null;
         String lower = s.toLowerCase().trim();
         try {
-            if (lower.endsWith("d")) {
-                long days = Long.parseLong(lower.replace("d", ""));
-                return System.currentTimeMillis() - days * 86_400_000L;
-            }
-            if (lower.endsWith("h")) {
-                long hours = Long.parseLong(lower.replace("h", ""));
-                return System.currentTimeMillis() - hours * 3_600_000L;
-            }
+            if (lower.endsWith("d"))
+                return System.currentTimeMillis()
+                        - Long.parseLong(lower.replace("d", "")) * 86_400_000L;
+            if (lower.endsWith("h"))
+                return System.currentTimeMillis()
+                        - Long.parseLong(lower.replace("h", "")) * 3_600_000L;
+            System.err.printf(
+                    "[error] Cannot parse duration \"%s\". Use a number followed by d or h.%n", s);
         } catch (NumberFormatException e) {
-            System.err.printf("%s[warn]%s Could not parse duration: %s%n",
-                    ANSI_YELLOW, ANSI_RESET, s);
+            System.err.printf(
+                    "[error] Cannot parse duration \"%s\". Use a number followed by d or h.%n", s);
         }
         return null;
     }
-
 
     private String formatSize(long bytes) {
         if (bytes >= 1L << 30) return String.format("%.1f GB", bytes / (double) (1L << 30));
