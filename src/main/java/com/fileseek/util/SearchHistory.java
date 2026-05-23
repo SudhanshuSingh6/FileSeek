@@ -11,13 +11,13 @@ import java.util.List;
 
 public final class SearchHistory {
 
-    private static final Path HISTORY_FILE =
-            ConfigManager.getConfigDirPath().resolve("history.txt");
-
     private static final int MAX_ENTRIES = 500;
     private static final String SEPARATOR = "\t";
     private static final DateTimeFormatter FMT =
             DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm:ss");
+
+    static Path HistoryFile =
+            ConfigManager.getConfigDirPath().resolve("history.txt");
 
     private SearchHistory() {
     }
@@ -25,10 +25,10 @@ public final class SearchHistory {
     public static void append(String query) {
         if (query == null || query.isBlank()) return;
         try {
-            Files.createDirectories(HISTORY_FILE.getParent());
+            Files.createDirectories(HistoryFile.getParent());
             String entry = LocalDateTime.now().format(FMT)
                     + SEPARATOR + query.trim() + System.lineSeparator();
-            Files.writeString(HISTORY_FILE, entry,
+            Files.writeString(HistoryFile, entry,
                     StandardOpenOption.CREATE, StandardOpenOption.APPEND);
             trimIfNeeded();
         } catch (IOException ignored) {
@@ -36,9 +36,9 @@ public final class SearchHistory {
     }
 
     public static List<String> read(int limit) {
-        if (!Files.exists(HISTORY_FILE)) return List.of();
+        if (!Files.exists(HistoryFile)) return List.of();
         try {
-            List<String> lines = Files.readAllLines(HISTORY_FILE);
+            List<String> lines = Files.readAllLines(HistoryFile);
             Collections.reverse(lines);
             return lines.stream()
                     .filter(l -> !l.isBlank())
@@ -51,16 +51,16 @@ public final class SearchHistory {
 
     public static void clear() {
         try {
-            Files.deleteIfExists(HISTORY_FILE);
+            Files.deleteIfExists(HistoryFile);
         } catch (IOException ignored) {
         }
     }
 
 
     private static void trimIfNeeded() throws IOException {
-        List<String> lines = Files.readAllLines(HISTORY_FILE);
+        List<String> lines = Files.readAllLines(HistoryFile);
         if (lines.size() <= MAX_ENTRIES) return;
         List<String> trimmed = lines.subList(lines.size() - MAX_ENTRIES, lines.size());
-        Files.write(HISTORY_FILE, trimmed);
+        Files.write(HistoryFile, trimmed);
     }
 }

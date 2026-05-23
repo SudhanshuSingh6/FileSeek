@@ -96,8 +96,7 @@ public class ScanResult {
     }
 
     public int totalProcessed() {
-        return filesIndexed.get() + filesUpdated.get()
-                + filesSkipped.get() + metadataOnly.get();
+        return filesIndexed.get() + filesSkipped.get() + metadataOnly.get();
     }
 
     @Override

@@ -5,13 +5,14 @@ import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
 
 import java.util.List;
+import java.util.concurrent.Callable;
 
 @Command(
         name = "history",
         mixinStandardHelpOptions = true,
         description = "Show recent search queries."
 )
-public class HistoryCommand implements Runnable {
+public class HistoryCommand implements Callable<Integer> {
 
     private static final String ANSI_DIM = "\u001B[2m";
     private static final String ANSI_RESET = "\u001B[0m";
@@ -26,11 +27,11 @@ public class HistoryCommand implements Runnable {
     private boolean clear;
 
     @Override
-    public void run() {
+    public Integer call() {
         if (clear) {
             SearchHistory.clear();
             System.out.println("Search history cleared.");
-            return;
+            return 0;
         }
 
         List<String> entries = SearchHistory.read(limit);
@@ -38,7 +39,7 @@ public class HistoryCommand implements Runnable {
         if (entries.isEmpty()) {
             System.out.println("No search history yet.");
             System.out.println("Run 'fileseek search <query>' to get started.");
-            return;
+            return 0;
         }
 
         System.out.println();
@@ -50,15 +51,18 @@ public class HistoryCommand implements Runnable {
             if (tab > 0) {
                 String timestamp = line.substring(0, tab);
                 String query = line.substring(tab + 1);
-                System.out.printf("  %s%2d.%s  %s%s%s  %s%n",
+                System.out.printf(
+                        "  %s%2d.%s  %s%s%s  %s%n",
                         ANSI_DIM, i + 1, ANSI_RESET,
                         ANSI_DIM, timestamp, ANSI_RESET,
-                        query);
+                        query
+                );
             } else {
                 System.out.printf("  %2d.  %s%n", i + 1, line);
             }
         }
 
         System.out.println();
+        return 0;
     }
 }

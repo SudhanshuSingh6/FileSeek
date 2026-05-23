@@ -5,6 +5,7 @@ import com.fileseek.config.ConfigManager;
 import com.fileseek.index.IndexManager;
 import com.fileseek.scanner.FileSystemWatcher;
 import com.fileseek.storage.IndexLock;
+import com.fileseek.util.AppContext;
 import picocli.CommandLine.Command;
 
 import java.io.IOException;
@@ -88,7 +89,7 @@ public class WatchCommand implements Callable<Integer> {
             System.out.println("Index saved. Goodbye.");
         }));
 
-        if (FileSeekCommand.verbose) {
+        if (AppContext.verbose) {
             System.out.printf("  [verbose] Registered %d director%s%n",
                     registered, registered == 1 ? "y" : "ies");
         }

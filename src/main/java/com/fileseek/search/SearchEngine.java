@@ -8,6 +8,7 @@ import com.fileseek.model.FileMetadata;
 import com.fileseek.model.Posting;
 import com.fileseek.model.QueryOptions;
 import com.fileseek.model.SearchResult;
+import com.fileseek.util.AppContext;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -45,7 +46,7 @@ public class SearchEngine {
         Map<Integer, Double> scores = route(query, options);
         if (scores.isEmpty()) return List.of();
 
-        if (FileSeekCommand.verbose) {
+        if (AppContext.verbose) {
             System.out.printf("  [verbose] Query tokens : %s%n", query.getTerms());
             System.out.printf("  [verbose] Search mode  : %s%n", query.isPhrase() ? "phrase" : options.isFuzzy() ? "fuzzy" : options.isPrefix() ? "prefix" : options.isRegex() ? "regex" : "keyword");
             System.out.printf("  [verbose] Candidates   : %,d documents%n", scores.size());
@@ -63,7 +64,7 @@ public class SearchEngine {
 
         Collections.sort(results);
 
-        if (FileSeekCommand.verbose) {
+        if (AppContext.verbose) {
             System.out.printf("  [verbose] After filters: %,d documents%n", results.size());
             System.out.printf("  [verbose] Top score    : %.4f%n", results.isEmpty() ? 0.0 : results.get(0).getScore());
         }

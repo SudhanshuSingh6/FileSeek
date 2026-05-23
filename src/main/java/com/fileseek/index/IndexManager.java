@@ -1,6 +1,5 @@
 package com.fileseek.index;
 
-import com.fileseek.cli.FileSeekCommand;
 import com.fileseek.config.AppConfig;
 import com.fileseek.config.ConfigManager;
 import com.fileseek.model.FileMetadata;
@@ -10,10 +9,12 @@ import com.fileseek.scanner.ScanResult;
 import com.fileseek.storage.CorruptionChecker;
 import com.fileseek.storage.IndexDeserializer;
 import com.fileseek.storage.IndexSerializer;
+import com.fileseek.util.AppContext;
 import com.fileseek.util.Tokenizer;
 
 import java.io.IOException;
-import java.nio.file.*;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.List;
 import java.util.Optional;
@@ -53,7 +54,7 @@ public class IndexManager {
                     .deserialize(documentStore, invertedIndex);
 
             long loadMs = System.currentTimeMillis() - startMs;
-            if (FileSeekCommand.verbose) {
+            if (AppContext.verbose) {
                 System.out.printf(
                         "  [verbose] Index loaded in %dms — "
                                 + "%,d documents, %,d terms, file: %s%n",

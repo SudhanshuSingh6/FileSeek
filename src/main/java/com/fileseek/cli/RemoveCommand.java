@@ -4,10 +4,12 @@ import com.fileseek.config.AppConfig;
 import com.fileseek.config.ConfigManager;
 import com.fileseek.index.IndexManager;
 import com.fileseek.storage.IndexLock;
+import com.fileseek.util.AppContext;
 import com.fileseek.util.PathUtils;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Parameters;
 
+import java.nio.file.Path;
 import java.util.concurrent.Callable;
 
 @Command(
@@ -53,8 +55,14 @@ public class RemoveCommand implements Callable<Integer> {
             mgr.load();
 
             int before = mgr.documentCount();
-            mgr.getDocumentStore().getAllDocuments().stream()
-                    .filter(m -> m.getPath().startsWith(absolute))
+
+            mgr.getDocumentStore()
+                    .getAllDocuments()
+                    .stream()
+                    .filter(m -> PathUtils.isUnder(
+                            Path.of(m.getPath()),
+                            Path.of(absolute)
+                    ))
                     .map(m -> m.getPath())
                     .toList()
                     .forEach(mgr::removeDocument);
@@ -65,7 +73,7 @@ public class RemoveCommand implements Callable<Integer> {
             System.out.printf("Removed: %s%n", absolute);
             System.out.printf("         %,d documents removed from index.%n", removed2);
 
-            if (FileSeekCommand.verbose) {
+            if (AppContext.verbose) {
                 System.out.printf("  [verbose] Index now contains %,d documents.%n",
                         mgr.documentCount());
             }

@@ -1,5 +1,6 @@
 package com.fileseek.cli;
 
+import com.fileseek.util.AppContext;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -60,14 +61,15 @@ import java.nio.charset.StandardCharsets;
 public class FileSeekCommand implements Runnable {
 
     @Option(
-            names = {"-v", "--verbose"},
+            names       = {"-v", "--verbose"},
             description = "Show query tokens, score breakdowns, and index details.",
-            scope = CommandLine.ScopeType.INHERIT
+            scope       = CommandLine.ScopeType.INHERIT
     )
-    public static boolean verbose = false;
+    public boolean verboseOpt = false;
 
     @Override
     public void run() {
+        AppContext.verbose = verboseOpt;
         printBanner();
         CommandLine.usage(this, System.out);
     }

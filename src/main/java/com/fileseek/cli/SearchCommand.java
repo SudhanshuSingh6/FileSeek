@@ -5,6 +5,7 @@ import com.fileseek.model.FileMetadata;
 import com.fileseek.model.QueryOptions;
 import com.fileseek.model.SearchResult;
 import com.fileseek.search.SearchEngine;
+import com.fileseek.util.AppContext;
 import com.fileseek.util.SearchHistory;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Option;
@@ -69,13 +70,12 @@ public class SearchCommand implements Callable<Integer> {
         mgr.load();
         long loadMs = System.currentTimeMillis() - loadStart;
 
-        if (FileSeekCommand.verbose) {
+        if (AppContext.verbose) {
             System.out.printf("  [verbose] Index loaded in %dms — "
                             + "%,d documents, %,d terms%n",
                     loadMs, mgr.documentCount(), mgr.termCount());
         }
 
-        // --- guard: index populated ---
         if (mgr.documentCount() == 0) {
             System.err.println(
                     "[error] Index is empty.\n"
@@ -83,10 +83,10 @@ public class SearchCommand implements Callable<Integer> {
             return 2;
         }
 
-        // --- build options ---
+        // build options
         QueryOptions options = buildOptions();
 
-        if (FileSeekCommand.verbose) {
+        if (AppContext.verbose) {
             System.out.printf("  [verbose] Raw query   : \"%s\"%n", query);
             System.out.printf("  [verbose] Mode        : %s%n",
                     detectMode(options));
@@ -101,7 +101,7 @@ public class SearchCommand implements Callable<Integer> {
         SearchEngine engine = new SearchEngine(mgr);
         List<SearchResult> results = engine.search(options);
 
-        if (FileSeekCommand.verbose) {
+        if (AppContext.verbose) {
             System.out.printf("  [verbose] Results     : %,d%n", results.size());
             System.out.printf("  [verbose] Duration    : %dms%n",
                     results.isEmpty() ? 0 : results.get(0).getSearchDurationMs());
@@ -167,7 +167,7 @@ public class SearchCommand implements Callable<Integer> {
                     ANSI_CYAN, result.getSnippet(), ANSI_RESET);
         }
 
-        if (FileSeekCommand.verbose) {
+        if (AppContext.verbose) {
             System.out.printf("    %s[verbose] docId=%d  tokens=%d%s%n",
                     ANSI_DIM,
                     meta.getDocId(), meta.getTokenCount(),

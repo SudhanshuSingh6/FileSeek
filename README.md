@@ -25,21 +25,21 @@ Found 4 results for "redis caching" (8ms)
 
 ## Stack
 
-| Component        | Technology                    |
-|------------------|-------------------------------|
-| Language         | Java 17                       |
-| CLI framework    | Picocli 4.7                   |
-| PDF parsing      | Apache PDFBox 3.0             |
-| Build tool       | Maven 3.8+                    |
-| Index format     | Custom binary (GZIP, delta)   |
-| Ranking          | BM25                          |
+| Component    | Technology                  |
+|--------------|-----------------------------|
+| Language     | Java 17                     |
+| CLI          | Picocli 4.7                 |
+| PDF parsing  | Apache PDFBox 3.0           |
+| Build tool   | Maven 3.8+                  |
+| Index format | Custom binary (GZIP, delta) |
+| Ranking      | BM25                        |
 
 ---
 
 ## Requirements
 
 - Java 17 or higher
-- Maven 3.8+ *(build only — not needed after installation)*
+- Maven 3.8+ *(build only — not required after installation)*
 
 ---
 
@@ -54,35 +54,36 @@ bash scripts/install.sh
 The install script:
 - Builds the fat jar with Maven
 - Installs it to `~/.fileseek/bin/fileseek.jar`
-- Creates a wrapper script at `/usr/local/bin/fileseek` (system-wide)
-  or `~/bin/fileseek` (user-only)
-- Generates a shell completion script and sources it from your shell profile
+- Creates a wrapper at `/usr/local/bin/fileseek` (system-wide) or `~/bin/fileseek` (user-only)
+- Generates and sources a shell completion script automatically
 
-**Manual install (no script):**
+**Manual install:**
 
 ```bash
 mvn package -DskipTests
 java -jar target/fileseek.jar --help
 ```
 
-**Override JVM memory:**
+**Override JVM memory for large directories:**
 
 ```bash
 FILESEEK_OPTS="-Xmx2g" fileseek add ~/LargeDirectory
 ```
+
+Default JVM flags in the wrapper: `-Xmx512m -Xms64m -XX:+UseG1GC`
 
 ---
 
 ## Quick Start
 
 ```bash
-# 1. Index a directory
+# Index a directory
 fileseek add ~/Projects
 
-# 2. Search
+# Search
 fileseek search "redis caching"
 
-# 3. Watch for live changes
+# Watch for live changes
 fileseek watch
 ```
 
@@ -101,13 +102,14 @@ fileseek add ~/Documents/Notes
 fileseek add .                    # current directory
 ```
 
-**What happens:**
+**What happens on each run:**
 
-1. Counts indexable files and shows a progress bar
-2. Loads any existing index from disk
-3. Scans the directory in parallel (one thread per CPU core)
-4. Skips unchanged files, re-indexes modified ones, removes deleted ones
-5. Saves the updated index atomically
+1. Counts indexable files and renders a progress bar with percentage
+2. Loads the existing index from disk
+3. Removes indexed documents whose files no longer exist
+4. Scans and indexes files in parallel (one thread per CPU core)
+5. Skips unchanged files, re-indexes modified ones
+6. Saves the updated index atomically via temp-file rename
 
 ```
 Counting files... 24,821 files found
@@ -133,8 +135,7 @@ fileseek search "dock" --prefix                   # prefix / autocomplete
 fileseek search "spring.*boot" --regex            # regex (token-level)
 fileseek search "redis" --ext .java               # filter by extension
 fileseek search "docker" --min-size 1MB           # filter by file size
-fileseek search "spring" --modified-after 7d      # filter by age
-fileseek search "redis" -v                        # verbose — shows scoring details
+fileseek search "spring" --modified-after 7d      # filter by recency
 ```
 
 **Search flags:**
@@ -145,23 +146,23 @@ fileseek search "redis" -v                        # verbose — shows scoring de
 | `--fuzzy` | Typo-tolerant — Levenshtein distance ≤ 2 |
 | `--prefix` | Prefix / autocomplete matching |
 | `--regex` | Token-level regular expression |
-| `--ext <.ext>` | Filter results by file extension |
-| `--min-size <size>` | Filter by minimum file size (`1MB`, `500KB`, `2GB`) |
-| `--modified-after <dur>` | Filter by modification recency (`7d`, `24h`) |
+| `--ext <.ext>` | Filter by file extension, e.g. `.java` |
+| `--min-size <n>` | Filter by minimum file size: `1MB`, `500KB`, `2GB` |
+| `--modified-after <d>` | Filter by modification recency: `7d`, `24h` |
 
-> **Phrase search note:** Wrap your query in double quotes and escape them for
-> your shell: `fileseek search '"spring boot"'`
+> **Phrase search:** Wrap in double quotes and escape for your shell:
+> `fileseek search '"spring boot"'`
 >
-> **Regex note:** Regex matches individual indexed tokens, not raw file content.
-> `spring.*boot` matches a single token matching that pattern,
-> not `spring` and `boot` as separate words across a sentence.
+> **Regex:** Pattern matched against individual indexed tokens, not raw file
+> content. `spring.*boot` matches a single token, not `spring` and `boot` as
+> separate words. See [docs/architecture.md](docs/architecture.md) for details.
 
 ---
 
 ### `fileseek watch`
 
-Monitor all indexed directories for filesystem changes and update the index
-automatically. Runs in the foreground — press `Ctrl+C` to stop.
+Monitor indexed directories for filesystem changes and update the index live.
+Runs in the foreground — press `Ctrl+C` to stop cleanly.
 
 ```bash
 fileseek watch
@@ -174,12 +175,8 @@ Watching: /home/user/projects
 [10:25:01] Directory added: /home/user/projects/new-module
 ```
 
-On `Ctrl+C`, the index is saved cleanly before exit.
-
-> **Note:** On Linux and macOS, WatchService uses native inotify/kqueue events
-> (low latency). On some Windows environments it may fall back to polling with
-> higher latency. This does not affect correctness — only the delay between a
-> file change and its appearance in the index.
+> **Windows note:** WatchService may fall back to polling (1–10s latency) on
+> some configurations. Correctness is not affected — only update latency.
 
 ---
 
@@ -195,8 +192,8 @@ fileseek remove ~/Downloads
 
 ### `fileseek stats`
 
-Display index statistics — document counts, term counts, largest files,
-most common terms, and extension breakdown.
+Display index statistics — document counts, unique terms, extension breakdown,
+most common terms, and largest indexed files.
 
 ```bash
 fileseek stats
@@ -281,7 +278,7 @@ Delete all configuration, index data, and search history.
 
 ```bash
 fileseek reset          # prompts for confirmation
-fileseek reset --yes    # skip confirmation
+fileseek reset --yes    # skip confirmation prompt
 ```
 
 ---
@@ -290,9 +287,9 @@ fileseek reset --yes    # skip confirmation
 
 | Flag | Description |
 |------|-------------|
-| `--help`, `-h` | Show help |
+| `--help`, `-h` | Show help for any command |
 | `--version`, `-V` | Show version |
-| `--verbose`, `-v` | Show internal details — query tokens, score breakdown, index load time |
+| `--verbose`, `-v` | Show query tokens, score breakdowns, index load time |
 
 `--verbose` is inherited by all subcommands:
 
@@ -311,14 +308,14 @@ fileseek search "redis" --verbose
 
 ## Shell Tab Completion
 
-After installation, tab completion is set up automatically:
+Tab completion is configured automatically by the install script:
 
 ```bash
 fileseek sea<TAB>          →  fileseek search
 fileseek search --<TAB>    →  --fuzzy  --prefix  --regex  --ext  --min-size  --modified-after
 ```
 
-To set it up manually:
+**Manual setup:**
 
 ```bash
 fileseek generate-completion > ~/.fileseek/completion.sh
@@ -332,16 +329,16 @@ source ~/.zshrc
 
 | Category | Extensions |
 |----------|------------|
-| Text     | `.txt` `.md` `.java` `.json` `.xml` `.yml` `.yaml` `.properties` |
-| PDF      | `.pdf` *(text layer only — scanned image PDFs are not supported)* |
+| Text | `.txt` `.md` `.java` `.json` `.xml` `.yml` `.yaml` `.properties` |
+| PDF | `.pdf` *(text layer only — scanned image PDFs are not supported)* |
 
-**Large file handling:** Files above the configured size threshold are indexed
-by filename only — they appear in filename searches but their content is not indexed.
+**Large file handling:** Files above the size threshold are indexed by filename
+only. They appear in filename searches but content is not indexed.
 
-| File type | Default threshold |
-|-----------|-------------------|
-| Text      | 15 MB             |
-| PDF       | 5 MB              |
+| Type | Default threshold |
+|------|-------------------|
+| Text | 15 MB |
+| PDF  | 5 MB  |
 
 Thresholds are configurable in `~/.fileseek/config.json`.
 
@@ -349,130 +346,27 @@ Thresholds are configurable in `~/.fileseek/config.json`.
 
 ## Configuration
 
-All configuration lives in `~/.fileseek/config.json`:
+`~/.fileseek/config.json`:
 
 ```json
 {
-  "watchedDirectories": ["/home/user/projects"],
-  "ignoredDirectories": [".git", "node_modules", "target", "build", "dist", ".idea"],
+  "watchedDirectories":  ["/home/user/projects"],
+  "ignoredDirectories":  [".git", "node_modules", "target", "build", "dist", ".idea"],
   "supportedExtensions": [".txt", ".md", ".java", ".json", ".xml", ".yml", ".properties", ".pdf"],
   "maxTextFileSizeBytes": 15728640,
   "maxPdfFileSizeBytes":   5242880
 }
 ```
 
-The index lives in `~/.fileseek/index/fileseek.idx`.
+**All FileSeek files:**
 
----
-
-## Architecture
-
-```
-fileseek add ~/Projects
-       │
-       ▼
-FileSeekApplication
-  ├── ConfigManager.load()           read ~/.fileseek/config.json
-  ├── IndexManager.load()            restore ~/.fileseek/index/fileseek.idx
-  │     └── IndexDeserializer        GZIP binary → DocumentStore + InvertedIndex
-  │
-  └── DirectoryScanner.scan()
-        │
-        ├── Pass 1: removeDeletedDocuments()
-        │     └── check each indexed path still exists on disk
-        │
-        └── Pass 2: parallel file indexing (ExecutorService, N=CPU cores)
-              ├── FileParser          route by extension → TextParser / PdfParser
-              ├── Tokenizer.tokenize()
-              │     lowercase → split on non-alphanumeric → stop words → tokens
-              └── IndexManager.indexDocument()
-                    ├── DocumentStore.addDocument()   path → docId mapping
-                    └── InvertedIndex.addPosting()    term → [(docId, [positions])]
-                                                       positional, delta-encoded on disk
-       │
-       ▼
-IndexManager.save()
-  └── IndexSerializer
-        ├── write to .tmp (atomic — crash-safe)
-        ├── GZIP compress
-        ├── delta-encode positions ([3,18,45] → [3,15,27])
-        └── rename .tmp → fileseek.idx
-```
-
-```
-fileseek search "redis caching"
-       │
-       ▼
-SearchCommand
-  └── SearchEngine.search(QueryOptions)
-        ├── QueryParser.parse()       detect phrase / tokenize
-        │
-        ├── route():
-        │     --regex   → RegexSearch    scan term set for pattern matches
-        │     phrase    → PhraseSearch   intersect posting lists → positional check
-        │     --fuzzy   → FuzzySearch    length filter → bounded Levenshtein
-        │     --prefix  → PrefixSearch   prefix scan → coverage-ratio boost
-        │     default   → keywordSearch  BM25 per term, filename boost ×3
-        │
-        ├── passesFilters()           --ext / --min-size / --modified-after
-        ├── Collections.sort()        by score descending
-        └── SnippetExtractor          re-read file → find match → extract context
-```
-
----
-
-## Indexing Details
-
-### Inverted Index
-
-Each indexed term maps to a posting list:
-
-```
-"redis" → [ (doc1, [3, 18, 45]), (doc2, [7]), (doc3, [0, 22]) ]
-           │  └─ positions of "redis" in doc1
-           └─ docId
-```
-
-Position data enables phrase search: to verify `"spring boot"` appears as
-a phrase, the engine confirms a document has `spring` at position *N* and
-`boot` at position *N+1*.
-
-### Persistence Format
-
-```
-~/.fileseek/index/fileseek.idx
-  [GZIP stream]
-    [4B] magic  0x46534558
-    [4B] version
-    [4B] document count
-      per document: docId, path, fileName, extension, size,
-                    lastModified, indexedAt, tokenCount
-    [4B] term count
-      per term: term string, posting count
-        per posting: docId, position count,
-                     delta-encoded positions
-```
-
-Writes go to a `.tmp` file first, then renamed atomically — a crash during
-write never corrupts the live index.
-
-### Incremental Indexing
-
-On every `fileseek add` run:
-
-| File state | Action |
-|------------|--------|
-| New file | Indexed |
-| Unchanged (`lastModified` matches) | Skipped |
-| Modified (`lastModified` changed) | Old entry removed, re-indexed |
-| Deleted | Removed from index |
-
-### File Locking
-
-A lock file at `~/.fileseek/index/fileseek.lock` prevents two FileSeek
-processes from writing the index simultaneously. The lock stores the owning
-process PID — stale locks from crashed processes are detected and removed
-automatically.
+| Path | Purpose |
+|------|---------|
+| `~/.fileseek/config.json` | Configuration |
+| `~/.fileseek/index/fileseek.idx` | Binary index |
+| `~/.fileseek/index/fileseek.lock` | Process lock (present only during writes) |
+| `~/.fileseek/history.txt` | Search history (tab-separated: timestamp, query) |
+| `~/.fileseek/completion.sh` | Shell tab completion script |
 
 ---
 
@@ -481,10 +375,10 @@ automatically.
 Results are ranked using **BM25** — the industry standard used by Elasticsearch
 and Lucene.
 
-**Why BM25 over TF-IDF:**
-TF-IDF grows linearly with term frequency — a document mentioning `redis` 100
-times scores 100× higher than one mentioning it once. BM25 saturates term
-frequency, so beyond a threshold, more occurrences add diminishing score.
+**Why not TF-IDF:** TF-IDF grows linearly with term frequency — a document
+mentioning `redis` 100 times scores 100× higher than one mentioning it once,
+which is not useful. BM25 saturates term frequency so additional occurrences
+add diminishing score.
 
 **Score components:**
 
@@ -492,29 +386,44 @@ frequency, so beyond a threshold, more occurrences add diminishing score.
 |-----------|--------|
 | BM25 IDF | Rare terms score higher than common terms |
 | BM25 TF | Saturates — prevents runaway frequency scores |
-| Length normalization | Short documents score higher for the same term frequency |
+| Length normalization | Short documents score higher for the same frequency |
 | Filename boost (×3) | Term in filename ranks above content-only match |
-| Phrase boost (×2) | Confirmed phrase matches rank above loose keyword matches |
-| Fuzzy distance penalty | Distance 1 → ×0.75, distance 2 → ×0.50 |
+| Phrase boost (×2) | Confirmed phrase match ranks above loose match |
+| Fuzzy penalty | Distance 1 → ×0.75 · Distance 2 → ×0.50 |
 | Prefix coverage | `prefix.length / term.length` multiplier |
+
+---
+
+## Incremental Indexing
+
+Every `fileseek add` run is incremental — only changed files are processed:
+
+| File state | Action |
+|------------|--------|
+| New | Indexed |
+| Unchanged (`lastModified` matches) | Skipped |
+| Modified (`lastModified` changed) | Removed and re-indexed |
+| Deleted | Removed from index |
+
+A `fileseek.lock` file containing the owning process PID prevents concurrent
+writes. Stale locks from crashed processes are automatically cleaned up via
+`ProcessHandle`.
 
 ---
 
 ## Performance
 
-Measured on a mid-range laptop (SSD, quad-core, 16 GB RAM):
-
 | Operation | Time |
 |-----------|------|
 | Initial index — 25K files | ~4–6s |
-| Incremental rescan — same directory | ~0.5s |
+| Incremental rescan | ~0.5s |
 | Keyword search | < 15ms |
 | Phrase search | < 20ms |
 | Fuzzy search | < 50ms |
 | Regex search | < 30ms |
 | Index file size — 25K files | ~8 MB |
 
-Parallel indexing uses one thread per CPU core — on an 8-core machine expect
+Parallel indexing uses one thread per CPU core. On an 8-core machine expect
 roughly 2–3× speedup over single-threaded.
 
 ---
@@ -525,29 +434,16 @@ roughly 2–3× speedup over single-threaded.
 mvn test
 ```
 
-**Test coverage:**
+19 test files across 6 packages:
 
-| Package | Test file | Key scenarios |
-|---------|-----------|---------------|
-| `util` | `TokenizerTest` | All three modes, stop words, edge cases |
-| `util` | `PathUtilsTest` | Cross-platform expansion, isUnder, parentOf |
-| `util` | `SearchHistoryTest` | Append, read, ordering, isolation |
-| `index` | `DocumentStoreTest` | CRUD, path lookup, restore, averageLength |
-| `index` | `InvertedIndexTest` | Postings, positions, removal, concurrency |
-| `index` | `IndexManagerTest` | Full pipeline, tokenCount, concurrent indexing |
-| `scanner` | `TextParserTest` | UTF-8, ISO-8859-1 fallback, multiline |
-| `scanner` | `FileParserTest` | Extension routing, unsupported types |
-| `scanner` | `DirectoryScannerTest` | Incremental, parallel, ignored dirs, large files |
-| `storage` | `IndexSerializerTest` | Roundtrip, delta encoding, tokenCount, corruption |
-| `search` | `QueryParserTest` | Phrase detection, stop words, edge cases |
-| `search` | `TfIdfScorerTest` | TF sublinearity, IDF rarity |
-| `search` | `BM25ScorerTest` | Saturation, length normalization, fallback |
-| `search` | `SearchEngineTest` | All modes, filters, ranking, BM25 saturation |
-| `search` | `FuzzySearchTest` | Levenshtein unit tests, distance ranking |
-| `search` | `PrefixSearchTest` | Term matching, coverage ranking, mode isolation |
-| `search` | `RegexSearchTest` | Patterns, alternation, invalid regex, integration |
-| `search` | `SnippetExtractorTest` | Context extraction, ellipsis, no newlines |
-| `config` | `AppConfigTest` | Defaults, case-insensitive extensions, thresholds |
+| Package | Test files |
+|---------|------------|
+| `util` | `TokenizerTest` · `PathUtilsTest` · `SearchHistoryTest` |
+| `index` | `DocumentStoreTest` · `InvertedIndexTest` · `IndexManagerTest` |
+| `scanner` | `TextParserTest` · `FileParserTest` · `DirectoryScannerTest` |
+| `storage` | `IndexSerializerTest` |
+| `search` | `QueryParserTest` · `TfIdfScorerTest` · `BM25ScorerTest` · `SearchEngineTest` · `FuzzySearchTest` · `PrefixSearchTest` · `RegexSearchTest` · `SnippetExtractorTest` |
+| `config` | `AppConfigTest` |
 
 ---
 
@@ -557,8 +453,7 @@ mvn test
 fileseek/
 ├── src/
 │   ├── main/java/com/fileseek/
-│   │   ├── cli/              commands (Search, Add, Remove, Config, Reset,
-│   │   │   │                           Watch, History, Stats)
+│   │   ├── cli/              Search, Add, Remove, Config, Reset, Watch, History, Stats
 │   │   │   └── display/      ProgressBar, Spinner
 │   │   ├── config/           AppConfig, ConfigManager, FirstRunSetup
 │   │   ├── scanner/          DirectoryScanner, FileParser, TextParser, PdfParser,
@@ -576,31 +471,40 @@ fileseek/
 │       ├── banner.txt
 │       └── stopwords.txt
 │
-├── scripts/
-│   └── install.sh
 ├── docs/
 │   └── architecture.md
+├── scripts/
+│   └── install.sh
 ├── README.md
 └── pom.xml
 ```
 
 ---
 
+## Documentation
+
+| File | Contents |
+|------|----------|
+| `README.md` | Installation, commands, configuration, performance |
+| `docs/architecture.md` | Component design, data flow, binary format spec, threading model, design decisions |
+
+---
+
 ## Known Limitations
 
-**Regex is token-level.** `spring.*boot` matches a single indexed token matching
-the pattern — it does not span multiple words. For cross-word regex, use
-`--fuzzy` or `--prefix` instead.
+**Regex is token-level.** `spring.*boot` matches a single indexed token — not
+`spring` and `boot` as separate words in a sentence.
 
-**PDF requires a text layer.** Scanned PDFs (image-only) return empty content.
-PDFBox extracts the text layer only.
+**PDF requires a text layer.** Scanned image PDFs produce no content.
 
-**WatchService latency on Windows.** Java WatchService may use polling on some
-Windows configurations, adding 1–10 seconds of latency before changes appear
-in the index. Correctness is not affected.
+**WatchService on Windows** may use polling (1–10s latency) on some configurations.
 
-**Index is single-user.** The file lock prevents concurrent writes but the index
-is not designed for multi-user shared network filesystems.
+**Single-user index.** Not designed for multi-user shared network filesystems.
+
+**No stemming.** `"running"` does not find documents containing only `"run"`.
+
+**English stop words only.** Non-English corpora are indexed without stop word
+filtering.
 
 ---
 
